@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>파일 확장자 차단</title>
+    <style>
+        body { font-family: sans-serif; padding: 30px; }
+        .section-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; }
+        .ext-group { margin-bottom: 20px; }
+        .ext-group label { margin-right: 10px; }
+        .custom-ext-input { margin-bottom: 10px; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 10px; }
+        .tag { background-color: #eee; padding: 5px 10px; border-radius: 20px; display: flex; align-items: center; }
+        .tag span { margin-right: 5px; }
+        .tag button { border: none; background: none; font-weight: bold; cursor: pointer; }
+        .count { font-size: 0.9rem; color: gray; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="section-title">◎ 파일 확장자 차단</div>
+<p>파일 확장자에 따라 특정 형식의 파일을 첨부하거나 전송하지 못하도록 제한</p>
+
+<!-- 고정 확장자 -->
+<div class="ext-group">
+    <strong>① 고정 확장자</strong><br/>
+    <label><input type="checkbox" value="bat" onchange="toggleFixedExt(this)"> bat</label>
+    <label><input type="checkbox" value="cmd" onchange="toggleFixedExt(this)"> cmd</label>
+    <label><input type="checkbox" value="com" onchange="toggleFixedExt(this)"> com</label>
+    <label><input type="checkbox" value="cpl" onchange="toggleFixedExt(this)"> cpl</label>
+    <label><input type="checkbox" value="exe" onchange="toggleFixedExt(this)"> exe</label>
+    <label><input type="checkbox" value="scr" onchange="toggleFixedExt(this)"> scr</label>
+    <label><input type="checkbox" value="js" onchange="toggleFixedExt(this)"> js</label>
+</div>
+
+<!-- 커스텀 확장자 -->
+<div class="ext-group">
+    <strong>② 커스텀 확장자</strong><br/>
+    <div class="custom-ext-input">
+        <input type="text" id="customExtInput" placeholder="확장자 입력" maxlength="20">
+        <button onclick="addCustomExt()">+추가</button>
+    </div>
+    <div class="count" id="customCount">0/200</div>
+    <div class="tag-list" id="customTags"></div>
+</div>
+
+<script>
+    const maxCustomExt = 200;
+    const customTags = new Set();
+
+    function toggleFixedExt(checkbox) {
+        const ext = checkbox.value;
+        const checked = checkbox.checked;
+        fetch('/api/ext/fixed-exts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ ext, checked }])
+        }).catch(err => console.error('고정 확장자 변경 실패:', err));
+    }
+
+    function addCustomExt() {
+        const input = document.getElementById("customExtInput");
+        let ext = input.value.trim().toLowerCase();
+        if (!ext || ext.length > 20 || customTags.has(ext) || customTags.size >= maxCustomExt) {
+            input.value = "";
+            return;
+        }
+        fetch(`/api/ext/custom-exts?ext=${encodeURIComponent(ext)}`, {
+            method: 'POST'
+        }).then(res => {
+            if (res.ok) {
+                customTags.add(ext);
+                input.value = "";
+                renderTags();
+            }
+        });
+    }
+
+    function removeCustomExt(ext) {
+        fetch(`/api/ext/custom-exts?ext=${encodeURIComponent(ext)}`, {
+            method: 'DELETE'
+        }).then(res => {
+            if (res.ok) {
+                customTags.delete(ext);
+                renderTags();
+            }
+        });
+    }
+
+    function renderTags() {
+        const container = document.getElementById("customTags");
+        container.innerHTML = "";
+        Array.from(customTags).forEach(ext => {
+            const tag = document.createElement("div");
+            tag.className = "tag";
+            tag.innerHTML = `<span>${ext}</span><button onclick="removeCustomExt('${ext}')">×</button>`;
+            container.appendChild(tag);
+        });
+        document.getElementById("customCount").innerText = `${customTags.size}/200`;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch('/api/ext/fixed-exts')
+            .then(res => res.json())
+            .then(data => {
+                data.forEach(item => {
+                    const checkbox = document.querySelector(`input[type="checkbox"][value="${item.ext}"]`);
+                    if (checkbox) checkbox.checked = item.checked;
+                });
+            });
+
+        fetch('/api/ext/custom-exts')
+            .then(res => res.json())
+            .then(data => {
+                data.forEach(item => customTags.add(item.ext));
+                renderTags();
+            });
+    });
+</script>
+
+</body>
+</html>
